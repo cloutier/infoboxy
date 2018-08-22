@@ -1,0 +1,27 @@
+{
+  "name": "infoboxy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cloutier/infoboxy.git"
+  },
+  "keywords": [
+    "wikidata",
+    "wikipedia"
+  ],
+  "author": "Vincent Cloutier",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/cloutier/infoboxy/issues"
+  },
+  "homepage": "https://github.com/cloutier/infoboxy#readme",
+  "dependencies": {
+    "mediawiki": "0.0.14",
+    "wikijs": "^4.8.1"
+  }
+}

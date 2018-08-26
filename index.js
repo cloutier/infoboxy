@@ -4,19 +4,40 @@ var bot = new MediaWiki.Bot();
 
 bot.settings.endpoint = "https://fr.wikipedia.org/w/api.php";
 
-
-bot.get({ action: "query", list: "embeddedin", eititle: "Modèle:Infobox_Municipalité_du_Canada", eilimit: 5000 }).complete(function (response) {
-    console.log(response.warnings);
-    console.log(response.continue);
-    console.log(response.query.embeddedin.length);
-    bot.get({ action: "query", list: "embeddedin", eititle: "Modèle:Infobox_Municipalité_du_Canada", eilimit: 5000, eicontinue: response.continue.eicontinue }).complete(function (response) {
-	console.log(response);
-//	console.log(response.warnings);
-//	console.log(response.continue);
-//	console.log(response.query.embeddedin.length);
-    });
+getAllPagesWithInfobox( "Modèle:Infobox_Préfecture_du_Japon", function (res) {
+    console.log(res);
+    console.log(res.length);
+})
+getAllPagesWithInfobox( "Modèle:Infobox_Municipalité_du_Canada", function (res) {
+    console.log(res);
+    console.log(res.length);
 });
-
+/*
 wiki().page('Batman')
     .then(page => page.info('alterEgo'))
     .then(console.log); // Bruce Wayne
+    */
+
+function getAllPagesWithInfobox(name, sucess) {
+    bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500 }).complete(function (response) {
+	results = [];
+	results = results.concat(response.query.embeddedin);
+	if (response.continue) {
+	    query(name, response.continue.eicontinue);
+	} else {
+	    sucess(results);
+	}
+    });
+    function query(name, eicontinue) {
+	bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500, eicontinue: eicontinue }).complete(function (response) {
+	    results = results.concat(response.query.embeddedin);
+	    if (response.continue) {
+		query(name, response.continue.eicontinue);
+	    } else {
+		sucess(results);
+	    }
+	});
+    }
+
+
+}

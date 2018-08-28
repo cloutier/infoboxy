@@ -22,6 +22,9 @@
   "homepage": "https://github.com/cloutier/infoboxy#readme",
   "dependencies": {
     "mediawiki": "0.0.14",
-    "wikijs": "^4.8.1"
+    "request": "^2.88.0",
+    "wiki-infobox-parser": "^0.1.11",
+    "wikijs": "^4.8.1",
+    "wtf_wikipedia": "^5.0.1"
   }
 }

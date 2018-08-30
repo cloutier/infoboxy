@@ -24,6 +24,8 @@
     "mediawiki": "0.0.14",
     "request": "^2.88.0",
     "wiki-infobox-parser": "^0.1.11",
+    "wikidata-edit": "^2.6.0",
+    "wikidata-sdk": "^5.15.4",
     "wikijs": "^4.8.1",
     "wtf_wikipedia": "^5.0.1"
   }

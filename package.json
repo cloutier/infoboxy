@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/cloutier/infoboxy#readme",
   "dependencies": {
+    "bluereq": "^2.1.7",
     "mediawiki": "0.0.14",
     "request": "^2.88.0",
     "wiki-infobox-parser": "^0.1.11",

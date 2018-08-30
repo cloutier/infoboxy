@@ -4,6 +4,7 @@ const wdk = require('wikidata-sdk')
 var bot = new MediaWiki.Bot();
 var wtf = require('wtf_wikipedia');
 const request = require('request');
+const breq = require('bluereq');
 
 bot.settings.endpoint = "https://fr.wikipedia.org/w/api.php";
 bot.settings.userAgent = "Infoboxy <https://fr.wikipedia.org/wiki/Utilisateur:Vincent_cloutier>";
@@ -20,13 +21,63 @@ const config = {
   userAgent: 'my-project-name/v3.2.5 (https://project.website)' // Default: `wikidata-edit/${pkg.version} (https://github.com/maxlath/wikidata-edit)`
 }
 
-const wikidataEdit = require('wikidata-edit')(config)
+//const wikidataEdit = require('wikidata-edit')(config)
 
-//getInfoboxCode( "Modèle:Infobox_Préfecture_du_Japon")
-getInfoboxCode( "Modèle:Infobox_Municipalité_du_Canada")
+// Later will go over every wikidata enabled infobox,
+// but let's restrain ourselves right now. 
+model = "Modèle:Infobox_Municipalité_du_Canada";
+model = "Modèle:Infobox_Préfecture_du_Japon";
+
+getInfoboxCode( model, wikidataProp => {
+    wikidataEnabledKeys = new Set();
+    wikidataProp.forEach(i => {
+	wikidataEnabledKeys.add(i.key);
+    });
+    console.log(wikidataEnabledKeys);
+    // Needs a check to stop if nothing in wikidata
+    getAllPagesWithInfobox( model, function (res) {
+	console.log(res);
+	res.slice(1, 3).forEach(i => {
+	    console.log(i);
+	    pageTitle = i.title;
+	    wtf.fetch(pageTitle, 'fr', function(err, doc) {
+		var data = doc.infobox(0).data
+		for(let index in data) { 
+		    let attr = data[index]; 
+		    console.log(index);
+		    if (wikidataEnabledKeys.has(index)) {
+			console.log(attr);
+			var url = wdk.getWikidataIdsFromWikipediaTitles({
+			    titles: pageTitle,
+			    sites: 'frwiki',
+			    languages: ['en', 'fr'],
+			    props: ['info', 'claims']
+			})
+			breq.get(url)
+			    .then(res => {
+				const { entities } = res.body
+				return wdk.simplify.entities(entities)
+			    })
+			    .then(entities => {
+				// do your thing with those entities data)
+				x = entities[Object.keys(entities)[0]];
+				prop = wikidataProp.find(x => x.key == index)["prop"];
+				console.log(x.id);
+				console.log(x.claims[prop]);
+				console.log(attr);
+			    });
+		    }
+		}
+	    });
+	});
+	console.log(res.length);
+    })
+
+})
 //getWikicode( "Préfecture_de_Chiba", "24270")
 //getInfoboxCode( "batman")
 //getInfoboxCode( "montreal")
+/*
 getAllPagesWithInfobox( "Modèle:Infobox_Préfecture_du_Japon", function (res) {
     //console.log(res);
     console.log(res.length);
@@ -36,6 +87,7 @@ wtf.fetch('Toronto', 'fr', function(err, doc) {
     var data = doc.infobox(0).data
     console.log(data);
 });
+*/
 function getPageInfobox(name) {
     wiki({ apiUrl: 'https://fr.wikipedia.org/w/api.php' }).page(name)
 	.then(page => page.fullInfo())
@@ -50,7 +102,7 @@ function getWikicode(name, pageid) {
     });
 
 }
-function getInfoboxCode(name) {
+function getInfoboxCode(name, success) {
     request('https://fr.wikipedia.org/w/index.php?action=raw&title=' + name, (err, res, body) => {
 	if (err) { console.log(err); }
 	code = res.body.substring(
@@ -67,13 +119,14 @@ function getInfoboxCode(name) {
 		if (value.substring(0, 10) == "{{Wikidata") {
 		    particle = value.substring(11, value.length);
 		    prop = particle.substring(0, particle.indexOf("|"));
+		    // What should be done with showonlyqualifier?
+		    // What should be done with "divisionX" + "nom de divisionX"?
 		    
 		    wikidataMatches.push({key: key, prop: prop})
 		}
 	    }
 	});
-	console.log(wikidataMatches);
-	//console.log(res.body);
+	success(wikidataMatches);
     });
 
 }

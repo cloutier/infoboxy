@@ -18,9 +18,25 @@ const Infobox = mongoose.model(
 	pageID: Number,
 	embeddedIn: Array ,
 	lastCheckedExistence: {type: Date, default: Date.now},
+	wiki: {type: String, default: "fr"},
 	lastCheckedEmbeddedIn: Date,
 	lastCrawled: {type: Date, default: Date.now},
 	wikidataEnabledKeys: [{_id: false, time:Date,ip:String,country:String}],
+    }
+);
+
+const Suggestion = mongoose.model(
+    'Suggestion',
+    {
+	type: String,
+	line: String,
+	qcode: String,
+	pcode: String,
+	boxEntry: String,
+	wikidataValue: String,
+	wikipediaValue: String,
+	pageID: Number,
+	generated: {type: Date, default: Date.now},
     }
 );
 
@@ -74,8 +90,8 @@ Infobox.find().sort({lastCheckedExistence: -1}).limit(1).then( (res, err) => {
 
 // Later will go over every wikidata enabled infobox,
 // but let's restrain ourselves right now. 
-model = "Modèle:Infobox_Préfecture_du_Japon";
 model = "Modèle:Infobox_Municipalité_du_Canada";
+model = "Modèle:Infobox_Préfecture_du_Japon";
 
 getInfoboxCode( model, wikidataProp => {
     wikidataEnabledKeys = new Set();
@@ -86,7 +102,7 @@ getInfoboxCode( model, wikidataProp => {
     // Needs a check to stop if nothing in wikidata
     getAllPagesWithInfobox( model, function (res) {
 	res.slice(1, 3).forEach(i => {
-	    console.log(i);
+	    //console.log(i);
 	    pageTitle = i.title;
 	    wtf.fetch(pageTitle, 'fr', function(err, doc) {
 		var data = doc.infobox(0).data
@@ -105,17 +121,32 @@ getInfoboxCode( model, wikidataProp => {
 				return wdk.simplify.entities(entities)
 			    })
 			    .then(entities => {
-				// do your thing with those entities data)
 				x = entities[Object.keys(entities)[0]];
 				prop = wikidataProp.find(x => x.key == index)["prop"];
 				console.log(x.id);
+				console.log(index);
 				console.log(prop);
 				console.log(x.claims[prop]);
 				console.log(attr);
 				if (attr.data.text == x.claims[prop]) {
 				    // Information already in wikidata don't need to be in wikipedia
 
-				    console.log("SAME");
+				    const suggestion = new Suggestion({
+					type: "REMOVE_FROM_WIKI",
+					pageID: i.pageid,
+					qcode: x.id,
+					pcode: prop,
+					wikidataValue: x.claims[prop],
+					wikipediaValue: attr.data.text,
+					boxEntry: index,
+				    });
+				    suggestion.save(function(err){
+
+					if (err) {
+					    console.error(err);
+					}
+					console.log("SAME");
+				    });
 				} else {
 				    console.log("DIFFERENT");
 
@@ -168,7 +199,7 @@ function getInfoboxCode(name, success) {
 	code.split("\n").forEach( x => {
 
 	    if (x[0] == "|") {
-		console.log(x);
+		//console.log(x);
 		key = x.substring(1, x.indexOf("=")).trim();
 		value = x.substring(x.indexOf("=") + 1, x.length).trim();
 		if (value.substring(0, 10) == "{{Wikidata") {

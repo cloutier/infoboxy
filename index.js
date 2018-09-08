@@ -5,6 +5,23 @@ var bot = new MediaWiki.Bot();
 var wtf = require('wtf_wikipedia');
 const request = require('request');
 const breq = require('bluereq');
+const mongoose = require('mongoose');
+
+mongoose.connect('mongodb://localhost/infoboxy',  { useNewUrlParser: true });
+var db = mongoose.connection;
+
+const Infobox = mongoose.model(
+    'Infobox',
+    {
+	title: String,
+	pageID: Number,
+	embeddedIn: Array ,
+	lastCheckedExistence: {type: Date, default: Date.now},
+	lastCheckedEmbeddedIn: Date,
+	lastCrawled: {type: Date, default: Date.now},
+	wikidataEnabledKeys: [{_id: false, time:Date,ip:String,country:String}],
+    }
+);
 
 bot.settings.endpoint = "https://fr.wikipedia.org/w/api.php";
 bot.settings.userAgent = "Infoboxy <https://fr.wikipedia.org/wiki/Utilisateur:Vincent_cloutier>";
@@ -21,12 +38,31 @@ const config = {
   userAgent: 'my-project-name/v3.2.5 (https://project.website)' // Default: `wikidata-edit/${pkg.version} (https://github.com/maxlath/wikidata-edit)`
 }
 
+getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés", function (res) {
+    console.log(res);
+    res.forEach(i => {
+	const infobox = {
+	    title: i.title,
+	    pageID: i.pageid,
+	    lastCheckedExistence: Date.now()
+	};
+	Infobox.findOneAndUpdate({pageID: i.pageid}, infobox, {upsert:true}, function(err, doc){
+
+	    if (err) {
+		console.error(err);
+	    }
+	    console.log("Found infobox template: " + i.title);
+	});
+	    
+
+    });
+});
 //const wikidataEdit = require('wikidata-edit')(config)
 
 // Later will go over every wikidata enabled infobox,
 // but let's restrain ourselves right now. 
-model = "Modèle:Infobox_Municipalité_du_Canada";
 model = "Modèle:Infobox_Préfecture_du_Japon";
+model = "Modèle:Infobox_Municipalité_du_Canada";
 
 getInfoboxCode( model, wikidataProp => {
     wikidataEnabledKeys = new Set();
@@ -36,7 +72,6 @@ getInfoboxCode( model, wikidataProp => {
     console.log(wikidataEnabledKeys);
     // Needs a check to stop if nothing in wikidata
     getAllPagesWithInfobox( model, function (res) {
-	console.log(res);
 	res.slice(1, 3).forEach(i => {
 	    console.log(i);
 	    pageTitle = i.title;
@@ -44,9 +79,7 @@ getInfoboxCode( model, wikidataProp => {
 		var data = doc.infobox(0).data
 		for(let index in data) { 
 		    let attr = data[index]; 
-		    console.log(index);
 		    if (wikidataEnabledKeys.has(index)) {
-			console.log(attr);
 			var url = wdk.getWikidataIdsFromWikipediaTitles({
 			    titles: pageTitle,
 			    sites: 'frwiki',
@@ -63,8 +96,17 @@ getInfoboxCode( model, wikidataProp => {
 				x = entities[Object.keys(entities)[0]];
 				prop = wikidataProp.find(x => x.key == index)["prop"];
 				console.log(x.id);
+				console.log(prop);
 				console.log(x.claims[prop]);
 				console.log(attr);
+				if (attr.data.text == x.claims[prop]) {
+				    // Information already in wikidata don't need to be in wikipedia
+
+				    console.log("SAME");
+				} else {
+				    console.log("DIFFERENT");
+
+				}
 			    });
 		    }
 		}
@@ -131,9 +173,31 @@ function getInfoboxCode(name, success) {
 
 }
 
+function getAllPagesInCategory(name, sucess) {
+    let results = [];
+    bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500 }).complete(function (response) {
+	results = results.concat(response.query.categorymembers);
+	if (response.continue) {
+	    query(name, response.continue.cmcontinue);
+	} else {
+	    sucess(results);
+	}
+    });
+    function query(name, eicontinue) {
+	bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500, cmcontinue: eicontinue }).complete(function (response) {
+	    results = results.concat(response.query.categorymembers);
+	    if (response.continue) {
+		query(name, response.continue.cmcontinue);
+	    } else {
+		sucess(results);
+	    }
+	});
+    }
+}
+
 function getAllPagesWithInfobox(name, sucess) {
+    let results = [];
     bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500 }).complete(function (response) {
-	results = [];
 	results = results.concat(response.query.embeddedin);
 	if (response.continue) {
 	    query(name, response.continue.eicontinue);

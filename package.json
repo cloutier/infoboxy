@@ -23,6 +23,7 @@
   "dependencies": {
     "bluereq": "^2.1.7",
     "mediawiki": "0.0.14",
+    "moment": "^2.22.2",
     "mongoose": "^5.2.13",
     "request": "^2.88.0",
     "wiki-infobox-parser": "^0.1.11",

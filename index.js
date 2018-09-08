@@ -6,6 +6,7 @@ var wtf = require('wtf_wikipedia');
 const request = require('request');
 const breq = require('bluereq');
 const mongoose = require('mongoose');
+const moment= require("moment");
 
 mongoose.connect('mongodb://localhost/infoboxy',  { useNewUrlParser: true });
 var db = mongoose.connection;
@@ -38,25 +39,37 @@ const config = {
   userAgent: 'my-project-name/v3.2.5 (https://project.website)' // Default: `wikidata-edit/${pkg.version} (https://github.com/maxlath/wikidata-edit)`
 }
 
-getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés", function (res) {
-    console.log(res);
-    res.forEach(i => {
-	const infobox = {
-	    title: i.title,
-	    pageID: i.pageid,
-	    lastCheckedExistence: Date.now()
-	};
-	Infobox.findOneAndUpdate({pageID: i.pageid}, infobox, {upsert:true}, function(err, doc){
+Infobox.find().sort({lastCheckedExistence: -1}).limit(1).then( (res, err) => {
+    if (err) 
+	console.log(err);
 
-	    if (err) {
-		console.error(err);
-	    }
-	    console.log("Found infobox template: " + i.title);
+    if ( moment(res[0].lastCheckedExistence).isSame( moment(), "hour" ) ) {
+	console.log("no need to update list of infoboxes");
+    } else {
+	getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés", function (res) {
+	    console.log(res);
+	    res.forEach(i => {
+		const infobox = {
+		    title: i.title,
+		    pageID: i.pageid,
+		    lastCheckedExistence: Date.now()
+		};
+		Infobox.findOneAndUpdate({pageID: i.pageid}, infobox, {upsert:true}, function(err, doc){
+
+		    if (err) {
+			console.error(err);
+		    }
+		    console.log("Found infobox template: " + i.title);
+		});
+
+
+	    });
 	});
-	    
 
-    });
+    }
+
 });
+
 //const wikidataEdit = require('wikidata-edit')(config)
 
 // Later will go over every wikidata enabled infobox,

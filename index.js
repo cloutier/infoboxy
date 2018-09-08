@@ -53,45 +53,42 @@ const config = {
   // Optional
   verbose: true, // Default: false
   userAgent: 'my-project-name/v3.2.5 (https://project.website)' // Default: `wikidata-edit/${pkg.version} (https://github.com/maxlath/wikidata-edit)`
-}
+};
+(async () => {
 
-Infobox.find().sort({lastCheckedExistence: -1}).limit(1).then( (res, err) => {
-    if (err) 
-	console.log(err);
-
-    if ( moment(res[0].lastCheckedExistence).isSame( moment(), "hour" ) ) {
+    res = await Infobox.find().sort({lastCheckedExistence: -1}).limit(1);
+    if ( moment(res[0].lastCheckedExistence).isSame( moment(), "day" ) ) {
 	console.log("no need to update list of infoboxes");
     } else {
-	getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés", function (res) {
-	    console.log(res);
-	    res.forEach(i => {
-		const infobox = {
-		    title: i.title,
-		    pageID: i.pageid,
-		    lastCheckedExistence: Date.now()
-		};
-		Infobox.findOneAndUpdate({pageID: i.pageid}, infobox, {upsert:true}, function(err, doc){
+	res = await getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés")
+	console.log(res);
+	res.forEach(i => {
+	    const infobox = {
+		title: i.title,
+		pageID: i.pageid,
+		lastCheckedExistence: Date.now()
+	    };
+	    Infobox.findOneAndUpdate({pageID: i.pageid}, infobox, {upsert:true}, function(err, doc){
 
-		    if (err) {
-			console.error(err);
-		    }
-		    console.log("Found infobox template: " + i.title);
-		});
-
-
+		if (err) {
+		    console.error(err);
+		}
+		console.log("Found infobox template: " + i.title);
 	    });
+
+
 	});
 
     }
 
-});
+})();
 
 //const wikidataEdit = require('wikidata-edit')(config)
 
 // Later will go over every wikidata enabled infobox,
 // but let's restrain ourselves right now. 
-model = "Modèle:Infobox_Municipalité_du_Canada";
 model = "Modèle:Infobox_Préfecture_du_Japon";
+model = "Modèle:Infobox_Municipalité_du_Canada";
 
 getInfoboxCode( model, wikidataProp => {
     wikidataEnabledKeys = new Set();
@@ -101,7 +98,9 @@ getInfoboxCode( model, wikidataProp => {
     console.log(wikidataEnabledKeys);
     // Needs a check to stop if nothing in wikidata
     getAllPagesWithInfobox( model, function (res) {
-	res.slice(1, 3).forEach(i => {
+	//res.slice(1, 3).forEach(i => {
+
+	res.forEach(i => {
 	    //console.log(i);
 	    pageTitle = i.title;
 	    wtf.fetch(pageTitle, 'fr', function(err, doc) {
@@ -217,18 +216,10 @@ function getInfoboxCode(name, success) {
 
 }
 
-function getAllPagesInCategory(name, sucess) {
-    let results = [];
-    bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500 }).complete(function (response) {
-	results = results.concat(response.query.categorymembers);
-	if (response.continue) {
-	    query(name, response.continue.cmcontinue);
-	} else {
-	    sucess(results);
-	}
-    });
-    function query(name, eicontinue) {
-	bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500, cmcontinue: eicontinue }).complete(function (response) {
+function getAllPagesInCategory(name) {
+    return new Promise( (resolve, reject) => {
+	let results = [];
+	bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500 }).complete(function (response) {
 	    results = results.concat(response.query.categorymembers);
 	    if (response.continue) {
 		query(name, response.continue.cmcontinue);
@@ -236,7 +227,17 @@ function getAllPagesInCategory(name, sucess) {
 		sucess(results);
 	    }
 	});
-    }
+	function query(name, eicontinue) {
+	    bot.get({ action: "query", list: "categorymembers", cmtitle: name, cmlimit: 500, cmcontinue: eicontinue }).complete(function (response) {
+		results = results.concat(response.query.categorymembers);
+		if (response.continue) {
+		    query(name, response.continue.cmcontinue);
+		} else {
+		    resolve(results);
+		}
+	    });
+	}
+    });
 }
 
 function getAllPagesWithInfobox(name, sucess) {

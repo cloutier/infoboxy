@@ -20,7 +20,7 @@ const Infobox = mongoose.model(
 	lastCheckedExistence: {type: Date, default: Date.now},
 	wiki: {type: String, default: "fr"},
 	lastCheckedEmbeddedIn: Date,
-	lastCrawled: {type: Date, default: Date.now},
+	lastCrawled: {type: Date },
 	wikidataEnabledKeys: [{_id: false, time:Date,ip:String,country:String}],
     }
 );
@@ -56,6 +56,7 @@ const config = {
 };
 (async () => {
 
+    // We find all infoboxes and store them
     res = await Infobox.find().sort({lastCheckedExistence: -1}).limit(1);
     if ( moment(res[0].lastCheckedExistence).isSame( moment(), "day" ) ) {
 	console.log("no need to update list of infoboxes");
@@ -81,14 +82,24 @@ const config = {
 
     }
 
+    // We find all the pages that contain a specific infobox
+    infoboxesToCrawl = await Infobox.find();//.limit(1);
+    for (infobox of infoboxesToCrawl) { 
+	infobox.embeddedIn = await getAllPagesWithInfobox( infobox.title);
+	infobox.lastCrawled = new Date();
+	infobox.save();
+	console.log("Fetched all pages containing infobox: " + infobox.title);
+    }
+
+
 })();
 
 //const wikidataEdit = require('wikidata-edit')(config)
 
 // Later will go over every wikidata enabled infobox,
 // but let's restrain ourselves right now. 
-model = "Modèle:Infobox_Préfecture_du_Japon";
 model = "Modèle:Infobox_Municipalité_du_Canada";
+model = "Modèle:Infobox_Préfecture_du_Japon";
 
 getInfoboxCode( model, wikidataProp => {
     wikidataEnabledKeys = new Set();
@@ -97,7 +108,7 @@ getInfoboxCode( model, wikidataProp => {
     });
     console.log(wikidataEnabledKeys);
     // Needs a check to stop if nothing in wikidata
-    getAllPagesWithInfobox( model, function (res) {
+    getAllPagesWithInfobox( model ).then( function (res) {
 	//res.slice(1, 3).forEach(i => {
 
 	res.forEach(i => {
@@ -163,10 +174,6 @@ getInfoboxCode( model, wikidataProp => {
 //getInfoboxCode( "batman")
 //getInfoboxCode( "montreal")
 /*
-getAllPagesWithInfobox( "Modèle:Infobox_Préfecture_du_Japon", function (res) {
-    //console.log(res);
-    console.log(res.length);
-})
 
 wtf.fetch('Toronto', 'fr', function(err, doc) {
     var data = doc.infobox(0).data
@@ -224,7 +231,7 @@ function getAllPagesInCategory(name) {
 	    if (response.continue) {
 		query(name, response.continue.cmcontinue);
 	    } else {
-		sucess(results);
+		resolve(results);
 	    }
 	});
 	function query(name, eicontinue) {
@@ -240,24 +247,26 @@ function getAllPagesInCategory(name) {
     });
 }
 
-function getAllPagesWithInfobox(name, sucess) {
-    let results = [];
-    bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500 }).complete(function (response) {
-	results = results.concat(response.query.embeddedin);
-	if (response.continue) {
-	    query(name, response.continue.eicontinue);
-	} else {
-	    sucess(results);
-	}
-    });
-    function query(name, eicontinue) {
-	bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500, eicontinue: eicontinue }).complete(function (response) {
+function getAllPagesWithInfobox(name) {
+    return new Promise( (resolve, reject) => {
+	let results = [];
+	bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500 }).complete(function (response) {
 	    results = results.concat(response.query.embeddedin);
 	    if (response.continue) {
 		query(name, response.continue.eicontinue);
 	    } else {
-		sucess(results);
+		resolve(results);
 	    }
 	});
-    }
+	function query(name, eicontinue) {
+	    bot.get({ action: "query", list: "embeddedin", eititle: name, eilimit: 500, eicontinue: eicontinue }).complete(function (response) {
+		results = results.concat(response.query.embeddedin);
+		if (response.continue) {
+		    query(name, response.continue.eicontinue);
+		} else {
+		    resolve(results);
+		}
+	    });
+	}
+    });
 }

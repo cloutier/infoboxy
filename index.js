@@ -15,16 +15,25 @@ const Infobox = mongoose.model(
     'Infobox',
     {
 	title: String,
+	code: String,
 	pageID: Number,
 	embeddedIn: Array ,
 	lastCheckedExistence: {type: Date, default: Date.now},
 	wiki: {type: String, default: "fr"},
 	lastCheckedEmbeddedIn: Date,
 	lastCrawled: {type: Date },
-	wikidataEnabledKeys: [{_id: false, time:Date,ip:String,country:String}],
+	wikidataEnabledKeys: Array,
     }
 );
 
+const Key = mongoose.model(
+    'Key',
+    {
+	key: String,
+	ref: Number,
+	pcodes: Array,
+    }
+);
 const Suggestion = mongoose.model(
     'Suggestion',
     {
@@ -58,7 +67,7 @@ const config = {
 
     // We find all infoboxes and store them
     res = await Infobox.find().sort({lastCheckedExistence: -1}).limit(1);
-    if ( moment(res[0].lastCheckedExistence).isSame( moment(), "day" ) ) {
+    if (res.length != 0 && moment(res[0].lastCheckedExistence).isSame( moment(), "month" ) ) {
 	console.log("no need to update list of infoboxes");
     } else {
 	res = await getAllPagesInCategory( "Catégorie:Projet:Infobox/Modèles liés")
@@ -82,16 +91,99 @@ const config = {
 
     }
 
-    // We find all the pages that contain a specific infobox
-    infoboxesToCrawl = await Infobox.find();//.limit(1);
-    for (infobox of infoboxesToCrawl) { 
-	infobox.embeddedIn = await getAllPagesWithInfobox( infobox.title);
+    // We find all the wikidata keys in an infobox
+    infoboxesToCrawl = await Infobox.find().limit(5);
+    for (let infobox of infoboxesToCrawl) { 
+	infobox.wikidataEnabledKeys = await getInfoboxCode(infobox.title);
+	infobox.wikidataEnabledKeys.forEach(i => {
+	    console.log(i);
+	    Key.updateOne({key: i.key}, {$inc: {"ref": 1, ["pcodes." + i.prop]: 1}}, {upsert: true}).exec();
+
+	});
 	infobox.lastCrawled = new Date();
 	infobox.save();
-	console.log("Fetched all pages containing infobox: " + infobox.title);
+	console.log("Fetched " + infobox.wikidataEnabledKeys.length + " wikidata keys for infobox: " + infobox.title);
+    }
+    
+    // We find all the pages that contain a specific infobox
+    infoboxesToCrawl = await Infobox.find();
+    infoboxesToCrawl = await Infobox.find({embeddedIn: {$exists: false}});//.limit(1);
+    for (let infobox of infoboxesToCrawl) { 
+	infobox.embeddedIn = await getAllPagesWithInfobox( infobox.title);
+	infobox.lastCheckedEmbeddedIn = new Date();
+	infobox.save();
+	console.log("Fetched " + infobox.embeddedIn.length + " pages containing infobox: " + infobox.title);
     }
 
+    // We then go over all infobox with wikidata
+    infoboxesToCrawl = await Infobox.aggregate([
+	{$match: {wikidataEnabledKeys: {$ne: []}}},
+	{$unwind: "$embeddedIn"}
+    ]);
 
+    //keys -> tuple
+    for (infobox of infoboxesToCrawl) {
+	wikidataEnabledKeysSet = new Set();
+	infobox.wikidataEnabledKeys.forEach(i => {
+	    wikidataEnabledKeysSet.add(i.key);
+	});
+	console.log(wikidataEnabledKeysSet);
+	pageTitle = infobox.embeddedIn.title;
+	console.log(pageTitle);
+	doc = await wtf.fetch(pageTitle, 'fr');
+	var data = doc.infobox(0).data
+	for(let index in data) { 
+	    let attr = data[index]; 
+	    if (wikidataEnabledKeysSet.has(index)) {
+		var url = wdk.getWikidataIdsFromWikipediaTitles({
+		    titles: pageTitle,
+		    sites: 'frwiki',
+		    languages: ['en', 'fr'],
+		    props: ['info', 'claims']
+		})
+		breq.get(url)
+		    .then(res => {
+			const { entities } = res.body
+			return wdk.simplify.entities(entities)
+		    })
+		    .then(entities => {
+			x = entities[Object.keys(entities)[0]];
+			prop = infobox.wikidataEnabledKeys.find(x => x.key == index)["prop"];
+			if (prop.length == 0)
+			    return;
+			console.log("aoiwefj " + prop.length)
+			console.log(x.id);
+			console.log(index);
+			console.log(prop);
+			console.log(x.claims[prop]);
+			console.log(attr);
+			if (attr.data.text == x.claims[prop]) {
+			    // Information already in wikidata don't need to be in wikipedia
+
+			    const suggestion = new Suggestion({
+				type: "REMOVE_FROM_WIKI",
+				pageID: i.pageid,
+				qcode: x.id,
+				pcode: prop,
+				wikidataValue: x.claims[prop],
+				wikipediaValue: attr.data.text,
+				boxEntry: index,
+			    });
+			    suggestion.save(function(err){
+
+				if (err) {
+				    console.error(err);
+				}
+				console.log("SAME");
+			    });
+			} else {
+			    console.log("DIFFERENT");
+
+			}
+		    });
+	    }
+	}
+    }
 })();
 
 //const wikidataEdit = require('wikidata-edit')(config)
@@ -101,7 +193,8 @@ const config = {
 model = "Modèle:Infobox_Municipalité_du_Canada";
 model = "Modèle:Infobox_Préfecture_du_Japon";
 
-getInfoboxCode( model, wikidataProp => {
+getInfoboxCode( model).then( wikidataProp => {
+    return;
     wikidataEnabledKeys = new Set();
     wikidataProp.forEach(i => {
 	wikidataEnabledKeys.add(i.key);
@@ -166,20 +259,10 @@ getInfoboxCode( model, wikidataProp => {
 		}
 	    });
 	});
-	console.log(res.length);
     })
 
 })
-//getWikicode( "Préfecture_de_Chiba", "24270")
-//getInfoboxCode( "batman")
-//getInfoboxCode( "montreal")
-/*
 
-wtf.fetch('Toronto', 'fr', function(err, doc) {
-    var data = doc.infobox(0).data
-    console.log(data);
-});
-*/
 function getPageInfobox(name) {
     wiki({ apiUrl: 'https://fr.wikipedia.org/w/api.php' }).page(name)
 	.then(page => page.fullInfo())
@@ -194,31 +277,35 @@ function getWikicode(name, pageid) {
     });
 
 }
-function getInfoboxCode(name, success) {
-    request('https://fr.wikipedia.org/w/index.php?action=raw&title=' + name, (err, res, body) => {
-	if (err) { console.log(err); }
-	code = res.body.substring(
-	    res.body.indexOf("<includeonly>") + 1, 
-	    res.body.indexOf("</includeonly>")
-	);
-	wikidataMatches = [];
-	code.split("\n").forEach( x => {
+function getInfoboxCode(name) {
+    return new Promise( (resolve, reject) => {
+	request('https://fr.wikipedia.org/w/index.php?action=raw&title=' + encodeURIComponent(name), (err, res, body) => {
+	    if (err) { console.log(err); }
+	    code = res.body.substring(
+		res.body.indexOf("<includeonly>") + 1, 
+		res.body.indexOf("</includeonly>")
+	    );
+	    wikidataMatches = [];
+	    code.split("\n").forEach( x => {
 
-	    if (x[0] == "|") {
-		//console.log(x);
-		key = x.substring(1, x.indexOf("=")).trim();
-		value = x.substring(x.indexOf("=") + 1, x.length).trim();
-		if (value.substring(0, 10) == "{{Wikidata") {
-		    particle = value.substring(11, value.length);
-		    prop = particle.substring(0, particle.indexOf("|"));
-		    // What should be done with showonlyqualifier?
-		    // What should be done with "divisionX" + "nom de divisionX"?
-		    
-		    wikidataMatches.push({key: key, prop: prop})
+		if (x[0] == "|") {
+		    key = x.substring(1, x.indexOf("=")).trim();
+		    value = x.substring(x.indexOf("=") + 1, x.length).trim();
+		    if (value.substring(0, 10) == "{{Wikidata") {
+			particle = value.substring(11, value.length);
+			prop = particle.substring(0, particle.indexOf("|"));
+			// What should be done with showonlyqualifier?
+			// Check if there is a showonlyqualifier + its raw prop
+
+			
+			// What should be done with "divisionX" + "nom de divisionX"?
+
+			wikidataMatches.push({key: key, prop: prop})
+		    }
 		}
-	    }
+	    });
+	    resolve(wikidataMatches);
 	});
-	success(wikidataMatches);
     });
 
 }

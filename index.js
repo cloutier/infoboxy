@@ -92,13 +92,11 @@ const config = {
     }
 
     // We find all the wikidata keys in an infobox
-    infoboxesToCrawl = await Infobox.find().limit(5);
+    infoboxesToCrawl = await Infobox.find()//.limit(5);
     for (let infobox of infoboxesToCrawl) { 
 	infobox.wikidataEnabledKeys = await getInfoboxCode(infobox.title);
 	infobox.wikidataEnabledKeys.forEach(i => {
-	    console.log(i);
 	    Key.updateOne({key: i.key}, {$inc: {"ref": 1, ["pcodes." + i.prop]: 1}}, {upsert: true}).exec();
-
 	});
 	infobox.lastCrawled = new Date();
 	infobox.save();
@@ -107,7 +105,7 @@ const config = {
     
     // We find all the pages that contain a specific infobox
     infoboxesToCrawl = await Infobox.find();
-    infoboxesToCrawl = await Infobox.find({embeddedIn: {$exists: false}});//.limit(1);
+    infoboxesToCrawl = await Infobox.find({embeddedIn: {$exists: false}}).limit(1);
     for (let infobox of infoboxesToCrawl) { 
 	infobox.embeddedIn = await getAllPagesWithInfobox( infobox.title);
 	infobox.lastCheckedEmbeddedIn = new Date();
